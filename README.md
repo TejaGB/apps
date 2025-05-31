@@ -10,11 +10,7 @@ To use this code, you will need a basic understanding of HTML and CSS.
 ## Usage
 To use the Ludo board, simply open the HTML file in your browser. You can move the pieces around the board using your own game logic.
 
-## Content:
-https://nkrgupta999.github.io/Ludo-Board/
 
-## Web-View
-https://nkrgupta999.github.io/Ludo-Board/ludo%20boad.html
 
 ## Contributing
 
@@ -32,18 +28,16 @@ This repository is open source and contributions are welcome. If you have update
 Please note that the information contained in this repository is provided for informational purposes only. We make no representations or warranties of any kind, express or implied, about the completeness, accuracy, reliability, suitability or availability with respect to the information contained in this repository for any purpose. Any reliance you place on such information is therefore strictly at your own risk.
 
 
-## LinkedIn 
-https://www.linkedin.com/in/nkrgupta999
 
-## Connect 
-https://linktr.ee/nkrgupta999
 
 ## Acknowledgments
 This project was inspired by the classic board game Ludo.
 
-## License
+## Code of Conduct
+[Terms and Conditions](CODE_OF_CONDUCT.md)
 
-Copyright (c) 2025
+## MIT License
+
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
 
