@@ -16,15 +16,20 @@
         <label for="numPlayers">Number of Players: </label>
         <select id="numPlayers">
             <option value="1">1</option>
-            <option value="2" selected>2</option>
+            <option value="2" selected>2</option> <!-- Default player count -->
             <option value="3">3</option>
             <option value="4">4</option>
         </select>
         &nbsp;&nbsp;&nbsp;
+        <label for="topicSelection">Select Topic: </label>
+        <select id="topicSelection">
+            <option value="">Loading Topics...</option>
+        </select>
+        &nbsp;&nbsp;&nbsp;
         <label for="difficulty">Select Difficulty: </label>
         <select id="difficulty">
-            <option value="easy">Easy</option>
-            <option value="medium" selected>Medium</option>
+            <option value="easy" selected>Easy</option> <!-- Default set to Easy -->
+            <option value="medium">Medium</option>
             <option value="hard">Hard</option>
         </select>
     </div>
@@ -73,6 +78,7 @@
 
     <script>
     let questions = [];
+    let availableTopics = [];
     let startTime;
     let humanPlayerQuestionStartTime;
     let humanPlayerCorrectAnswers = 0;
@@ -94,13 +100,81 @@
     }
 
     fetch('questions.csv')
-        .then(response => response.text())
-        .then(csv => {
-            const lines = csv.trim().split('\n').slice(1);
-            questions = lines.map(line => {
-                const [difficulty, question, A, B, C, D, answer] = line.split(',');
-                return { difficulty, question, A, B, C, D, answer: answer.trim() };
-            });
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            return response.text();
+        })
+        .then(csvText => {
+            const lines = csvText.trim().split('\n');
+            const header = lines[0].split(',').map(h => h.trim().toLowerCase()); // Process header
+            const questionsStartIndex = 1; // Data starts from the second line
+
+            // Dynamically find column indices - more robust
+            // For this subtask, we'll stick to the agreed fixed order for simplicity,
+            // but a production system might map headers to indices.
+            // const topicIndex = header.indexOf('topic');
+            // const difficultyIndex = header.indexOf('difficulty');
+            // ... etc.
+
+            const uniqueTopics = new Set();
+            questions = []; // Reset questions array
+
+            for (let i = questionsStartIndex; i < lines.length; i++) {
+                const line = lines[i];
+                if (line.trim() === '') continue; // Skip empty lines
+
+                const parts = line.split(',');
+
+                // Assuming fixed order: topic, difficulty, question, A, B, C, D, answer
+                if (parts.length < 8) { // Basic validation for enough columns
+                    console.warn(`Skipping malformed CSV line: ${line}`);
+                    continue;
+                }
+
+                const topic = parts[0].trim();
+                const difficulty = parts[1].trim();
+                const questionText = parts[2].trim(); // Renamed to avoid conflict with global 'question'
+                const optA = parts[3].trim();
+                const optB = parts[4].trim();
+                const optC = parts[5].trim();
+                const optD = parts[6].trim();
+                const correctAnswer = parts[7].trim();
+
+                if (topic) {
+                    uniqueTopics.add(topic);
+                }
+
+                questions.push({
+                    topic: topic,
+                    difficulty: difficulty,
+                    question: questionText, // Storing actual question text under 'question' key
+                    A: optA,
+                    B: optB,
+                    C: optC,
+                    D: optD,
+                    answer: correctAnswer
+                });
+            }
+
+            availableTopics = Array.from(uniqueTopics).sort();
+
+            // console.log("Questions loaded:", questions.length);
+            // console.log("Available topics:", availableTopics);
+
+            if (typeof populateTopicSelector === 'function') {
+                populateTopicSelector();
+            } else {
+                // This case should ideally not happen if functions are defined before use.
+                console.error("populateTopicSelector function is not defined when called.");
+            }
+        })
+        .catch(error => {
+            console.error("Error fetching or parsing questions.csv:", error);
+            // It might be useful to inform the user or disable quiz features if questions can't load.
+            document.getElementById("questionBox").innerHTML = "<p>Error loading questions. Please try again later.</p>";
+            document.getElementById("questionBox").style.display = "block";
         });
 
     function setupPlayerColors() {
@@ -161,63 +235,135 @@
         // console.log("Board visuals updated for player count. Active colors:", activeColors); // For debugging
     }
 
-    function showQuestion() {
-        const level = document.getElementById("difficulty").value;
-        const filtered = questions.filter(q => q.difficulty === level);
-        const q = filtered[Math.floor(Math.random() * filtered.length)];
-        const isBot = totalPlayers === 1 && currentPlayer === 2;
-
-        if (isBot) {
-            const botQuestionViewTime = new Date().getTime();
-            let humanSuccessRate = 0.5; // Default if no questions answered yet
-            if (humanPlayerTotalQuestions > 0) {
-                humanSuccessRate = humanPlayerCorrectAnswers / humanPlayerTotalQuestions;
-            }
-
-            let botCorrectChance;
-            if (humanSuccessRate > 0.7) { // Player is doing well, bot gets harder
-                botCorrectChance = 0.85;
-            } else if (humanSuccessRate < 0.4) { // Player is struggling, bot gets easier
-                botCorrectChance = 0.35;
-            } else { // Medium difficulty
-                botCorrectChance = 0.60;
-            }
-
-            let botWillBeCorrect = Math.random() < botCorrectChance;
-            let botChoice;
-            const choices = ['A', 'B', 'C', 'D'];
-            const correctAnswerValue = q.answer; // e.g., 'A'
-
-            if (botWillBeCorrect) {
-                botChoice = correctAnswerValue;
-            } else {
-                // Pick a random wrong answer
-                let wrongChoices = choices.filter(c => c !== correctAnswerValue);
-                botChoice = wrongChoices[Math.floor(Math.random() * wrongChoices.length)];
-            }
-
-            // Bot answers after a random delay (3 to 15 seconds)
-            // The time taken will affect bot's dice roll via submitAnswer's logic
-            const botThinkingTime = Math.floor(Math.random() * 12000) + 3000;
-
-            setTimeout(() => {
-                // 'q.answer' is the actual correct answer key, e.g., 'A', 'B' etc.
-                submitAnswer(botChoice, correctAnswerValue, botQuestionViewTime);
-            }, botThinkingTime);
-            return; // Important to return after setting up the bot's delayed answer
+    function populateTopicSelector() {
+        const topicSelector = document.getElementById("topicSelection");
+        if (!topicSelector) {
+            console.error("Topic selector element not found.");
+            return;
         }
 
-        const box = document.getElementById("questionBox");
-        box.innerHTML = `
-            <p><strong>${q.question}</strong></p>
-            <button onclick="submitAnswer('A', '${q.answer}', humanPlayerQuestionStartTime)">${q.A}</button>
-            <button onclick="submitAnswer('B', '${q.answer}', humanPlayerQuestionStartTime)">${q.B}</button>
-            <button onclick="submitAnswer('C', '${q.answer}', humanPlayerQuestionStartTime)">${q.C}</button>
-            <button onclick="submitAnswer('D', '${q.answer}', humanPlayerQuestionStartTime)">${q.D}</button>
-        `;
-        box.style.display = 'block';
-        humanPlayerQuestionStartTime = new Date().getTime();
+        topicSelector.innerHTML = ""; // Clear existing options (e.g., "Loading Topics...")
+
+        if (availableTopics.length === 0) {
+            const option = document.createElement("option");
+            option.value = "";
+            option.textContent = "No Topics Loaded";
+            topicSelector.appendChild(option);
+            topicSelector.disabled = true; // Disable if no topics
+            return;
+        }
+
+        topicSelector.disabled = false; // Enable if topics are available
+        availableTopics.forEach(topic => {
+            const option = document.createElement("option");
+            option.value = topic;
+            // Assuming topic names from CSV are suitable for display.
+            // If capitalization is desired: option.textContent = capitalizeFirstLetter(topic);
+            option.textContent = topic;
+            topicSelector.appendChild(option);
+        });
+
+        // Set default topic selection (e.g., the first topic in the sorted list)
+        if (availableTopics.length > 0) {
+            topicSelector.value = availableTopics[0];
+        }
+
+        // Ensure difficulty is set to Easy by default (already set in HTML via 'selected',
+        // but can be reaffirmed here if needed, or if HTML wasn't changed)
+        const difficultySelector = document.getElementById("difficulty");
+        if (difficultySelector && difficultySelector.value !== "easy") {
+             difficultySelector.value = "easy"; // Ensures JS sets it if HTML default fails
+        }
+
+        // Any logic that needs to run after selectors are ready can be triggered here.
+        // For example, if questions should be immediately filtered or a "start game" button enabled.
     }
+
+function showQuestion() {
+    const selectedDifficulty = document.getElementById("difficulty").value;
+    const selectedTopic = document.getElementById("topicSelection").value;
+    const questionBox = document.getElementById("questionBox"); // Get questionBox once
+
+    // Filter questions by both selected difficulty and topic
+    const filteredQuestions = questions.filter(q => {
+        // Ensure q.topic and q.difficulty exist to prevent errors if data is malformed
+        return q.topic === selectedTopic && q.difficulty === selectedDifficulty;
+    });
+
+    if (filteredQuestions.length === 0) {
+        questionBox.innerHTML = "<p>No questions available for the selected topic and difficulty. Please change your selections or check the question data.</p>";
+        questionBox.style.display = 'block';
+        // Clear previous dice result if no question can be shown
+        const diceResultDisplay = document.getElementById("diceResult");
+        if (diceResultDisplay) {
+            diceResultDisplay.innerText = "";
+        }
+        return; // Exit the function as no question can be displayed
+    }
+
+    // Select a random question from the filtered list
+    const q = filteredQuestions[Math.floor(Math.random() * filteredQuestions.length)];
+
+    // Bot logic: uses global 'totalPlayers' and 'currentPlayer'
+    const isBot = totalPlayers === 1 && currentPlayer === 2;
+
+    if (isBot) {
+        const botQuestionViewTime = new Date().getTime();
+        let humanSuccessRate = 0.5;
+        if (humanPlayerTotalQuestions > 0) {
+            humanSuccessRate = humanPlayerCorrectAnswers / humanPlayerTotalQuestions;
+        }
+
+        let botCorrectChance;
+        if (humanSuccessRate > 0.7) {
+            botCorrectChance = 0.85;
+        } else if (humanSuccessRate < 0.4) {
+            botCorrectChance = 0.35;
+        } else {
+            botCorrectChance = 0.60;
+        }
+
+        let botWillBeCorrect = Math.random() < botCorrectChance;
+        let botChoice;
+        const choices = ['A', 'B', 'C', 'D'];
+        const correctAnswerValue = q.answer;
+
+        if (botWillBeCorrect) {
+            botChoice = correctAnswerValue;
+        } else {
+            let wrongChoices = choices.filter(c => c !== correctAnswerValue);
+            // Ensure wrongChoices is not empty (e.g. if q.answer was somehow not A,B,C,D)
+            if (wrongChoices.length === 0) wrongChoices = choices.filter(c => c !== choices[0]); // fallback
+            if (wrongChoices.length === 0) wrongChoices = ['A']; // ultimate fallback
+            botChoice = wrongChoices[Math.floor(Math.random() * wrongChoices.length)];
+        }
+
+        const botThinkingTime = Math.floor(Math.random() * 12000) + 3000;
+
+        setTimeout(() => {
+            submitAnswer(botChoice, correctAnswerValue, botQuestionViewTime);
+        }, botThinkingTime);
+        return; // Bot doesn't need HTML question display
+    }
+
+    // Human player's turn: display the question
+    // Ensure q and its properties (q.question, q.A etc.) are valid
+    if (!q || typeof q.question === 'undefined') {
+        questionBox.innerHTML = "<p>Selected question is invalid. Please try again.</p>";
+        questionBox.style.display = 'block';
+        return;
+    }
+
+    questionBox.innerHTML = `
+        <p><strong>${q.question}</strong></p>
+        <button onclick="submitAnswer('A', '${q.answer}', humanPlayerQuestionStartTime)">${q.A}</button>
+        <button onclick="submitAnswer('B', '${q.answer}', humanPlayerQuestionStartTime)">${q.B}</button>
+        <button onclick="submitAnswer('C', '${q.answer}', humanPlayerQuestionStartTime)">${q.C}</button>
+        <button onclick="submitAnswer('D', '${q.answer}', humanPlayerQuestionStartTime)">${q.D}</button>
+    `;
+    questionBox.style.display = 'block';
+    humanPlayerQuestionStartTime = new Date().getTime(); // Record start time for human player
+}
 
     function submitAnswer(choice, correctAnswer, questionStartTime) {
         const timeTaken = (new Date().getTime() - questionStartTime) / 1000;
