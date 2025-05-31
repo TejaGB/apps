@@ -77,8 +77,21 @@
     let humanPlayerQuestionStartTime;
     let humanPlayerCorrectAnswers = 0;
     let humanPlayerTotalQuestions = 0;
+    let playerColorMapping = {};
+    const defaultColors = ['green', 'yellow', 'red', 'blue']; // Standard Ludo color order
+    const diagonalPairs = {
+        'green': 'red',
+        'yellow': 'blue',
+        'red': 'green',
+        'blue': 'yellow'
+    };
     let currentPlayer = 1;
     let totalPlayers = 2;
+
+    function capitalizeFirstLetter(string) {
+        if (!string) return ''; // Handle empty or null strings
+        return string.charAt(0).toUpperCase() + string.slice(1);
+    }
 
     fetch('questions.csv')
         .then(response => response.text())
@@ -89,6 +102,64 @@
                 return { difficulty, question, A, B, C, D, answer: answer.trim() };
             });
         });
+
+    function setupPlayerColors() {
+        // totalPlayers is the global variable reflecting the user's selection
+        // from the numPlayers dropdown (1, 2, 3, or 4).
+        // It's assumed to be up-to-date when this function is called.
+        playerColorMapping = {}; // Reset previous mapping
+
+        if (totalPlayers === 1 || totalPlayers === 2) {
+            // Player 1 (Human) gets the first default color.
+            const player1Color = defaultColors[0]; // e.g., green
+            // Player 2 (Bot or Human) gets the diagonally opposite color.
+            const player2Color = diagonalPairs[player1Color]; // e.g., red
+
+            playerColorMapping[1] = player1Color;
+            playerColorMapping[2] = player2Color;
+        } else if (totalPlayers === 3) {
+            playerColorMapping[1] = defaultColors[0];
+            playerColorMapping[2] = defaultColors[1];
+            playerColorMapping[3] = defaultColors[2];
+        } else { // 4 players (totalPlayers === 4)
+            for (let i = 0; i < defaultColors.length; i++) {
+                playerColorMapping[i + 1] = defaultColors[i];
+            }
+        }
+        // Later steps will use this mapping to control pieces and UI.
+        // console.log("Player colors set up:", playerColorMapping); // For debugging
+    }
+
+    function updateBoardVisualsForPlayerCount() {
+        // Get the list of colors that are currently active based on playerColorMapping
+        const activeColors = Object.values(playerColorMapping);
+
+        // Iterate over all default Ludo colors
+        defaultColors.forEach(color => {
+            // Find the house element for the current color (e.g., div with class "house green")
+            const houseElement = document.querySelector(`.house.${color}`);
+
+            // It's also good practice to handle pieces if they are separate DOM elements,
+            // but for now, we'll focus on the house.
+            // Example for pieces:
+            // const pieceElements = document.querySelectorAll(`.piece.${color}`);
+
+            if (houseElement) {
+                if (activeColors.includes(color)) {
+                    // If the color is active, ensure its house is visible
+                    houseElement.style.display = 'block';
+                    // If pieces were made non-interactive, make them interactive here
+                    // pieceElements.forEach(p => p.classList.remove('disabled-piece'));
+                } else {
+                    // If the color is not active, hide its house
+                    houseElement.style.display = 'none';
+                    // If pieces exist, disable them too
+                    // pieceElements.forEach(p => p.classList.add('disabled-piece'));
+                }
+            }
+        });
+        // console.log("Board visuals updated for player count. Active colors:", activeColors); // For debugging
+    }
 
     function showQuestion() {
         const level = document.getElementById("difficulty").value;
@@ -190,7 +261,8 @@
         if (currentPlayer > effectiveNumPlayersForTurnCycle) {
             currentPlayer = 1;
         }
-        document.getElementById("turnDisplay").innerText = "Current Turn: Player " + currentPlayer;
+        const nextPlayerColorName = playerColorMapping[currentPlayer] ? capitalizeFirstLetter(playerColorMapping[currentPlayer]) : '';
+        document.getElementById("turnDisplay").innerText = `Current Turn: Player ${currentPlayer} (${nextPlayerColorName})`;
 
         // Auto trigger for bot. 'totalPlayers' refers to the user's selection of "1 player".
         // 'currentPlayer' is 2 for the bot in a 1-player game.
@@ -207,12 +279,25 @@
         });
 
         document.getElementById("numPlayers").addEventListener('change', () => {
-            totalPlayers = parseInt(document.getElementById("numPlayers").value); // Update global totalPlayers
-            currentPlayer = 1; // Reset to player 1
-            document.getElementById("turnDisplay").innerText = "Current Turn: Player " + currentPlayer;
-            // Optional: Clear any pending bot actions if switching away from a bot turn.
-            // For now, this is considered outside immediate scope unless issues arise.
+            totalPlayers = parseInt(document.getElementById("numPlayers").value);
+            currentPlayer = 1;
+            // currentPlayer is 1 here
+            setupPlayerColors(); // Re-setup colors when player count changes
+            updateBoardVisualsForPlayerCount(); // Add this call
+            const changedPlayerColorName = playerColorMapping[currentPlayer] ? capitalizeFirstLetter(playerColorMapping[currentPlayer]) : '';
+            document.getElementById("turnDisplay").innerText = `Current Turn: Player ${currentPlayer} (${changedPlayerColorName})`;
+            // Logic to update UI for non-active players will be in a subsequent step.
         });
+
+        // Initial setup:
+        // Ensure totalPlayers reflects the initial state of the numPlayers dropdown value.
+        totalPlayers = parseInt(document.getElementById("numPlayers").value);
+        setupPlayerColors();
+        updateBoardVisualsForPlayerCount(); // Add this call
+        // Update turn display for initial load.
+        // currentPlayer is initially 1
+        const initialPlayerColor = playerColorMapping[currentPlayer] ? capitalizeFirstLetter(playerColorMapping[currentPlayer]) : '';
+        document.getElementById("turnDisplay").innerText = `Current Turn: Player ${currentPlayer} (${initialPlayerColor})`;
     });
     </script>
 
