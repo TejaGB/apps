@@ -74,6 +74,9 @@
     <script>
     let questions = [];
     let startTime;
+    let humanPlayerQuestionStartTime;
+    let humanPlayerCorrectAnswers = 0;
+    let humanPlayerTotalQuestions = 0;
     let currentPlayer = 1;
     let totalPlayers = 2;
 
@@ -94,53 +97,103 @@
         const isBot = totalPlayers === 1 && currentPlayer === 2;
 
         if (isBot) {
-            // Bot answers randomly after short delay
+            const botQuestionViewTime = new Date().getTime();
+            let humanSuccessRate = 0.5; // Default if no questions answered yet
+            if (humanPlayerTotalQuestions > 0) {
+                humanSuccessRate = humanPlayerCorrectAnswers / humanPlayerTotalQuestions;
+            }
+
+            let botCorrectChance;
+            if (humanSuccessRate > 0.7) { // Player is doing well, bot gets harder
+                botCorrectChance = 0.85;
+            } else if (humanSuccessRate < 0.4) { // Player is struggling, bot gets easier
+                botCorrectChance = 0.35;
+            } else { // Medium difficulty
+                botCorrectChance = 0.60;
+            }
+
+            let botWillBeCorrect = Math.random() < botCorrectChance;
+            let botChoice;
+            const choices = ['A', 'B', 'C', 'D'];
+            const correctAnswerValue = q.answer; // e.g., 'A'
+
+            if (botWillBeCorrect) {
+                botChoice = correctAnswerValue;
+            } else {
+                // Pick a random wrong answer
+                let wrongChoices = choices.filter(c => c !== correctAnswerValue);
+                botChoice = wrongChoices[Math.floor(Math.random() * wrongChoices.length)];
+            }
+
+            // Bot answers after a random delay (3 to 15 seconds)
+            // The time taken will affect bot's dice roll via submitAnswer's logic
+            const botThinkingTime = Math.floor(Math.random() * 12000) + 3000;
+
             setTimeout(() => {
-                const choices = ['A', 'B', 'C', 'D'];
-                const botChoice = choices[Math.floor(Math.random() * 4)];
-                submitAnswer(botChoice, q.answer);
-            }, 1500);
-            return;
+                // 'q.answer' is the actual correct answer key, e.g., 'A', 'B' etc.
+                submitAnswer(botChoice, correctAnswerValue, botQuestionViewTime);
+            }, botThinkingTime);
+            return; // Important to return after setting up the bot's delayed answer
         }
 
         const box = document.getElementById("questionBox");
         box.innerHTML = `
             <p><strong>${q.question}</strong></p>
-            <button onclick="submitAnswer('A', '${q.answer}')">${q.A}</button>
-            <button onclick="submitAnswer('B', '${q.answer}')">${q.B}</button>
-            <button onclick="submitAnswer('C', '${q.answer}')">${q.C}</button>
-            <button onclick="submitAnswer('D', '${q.answer}')">${q.D}</button>
+            <button onclick="submitAnswer('A', '${q.answer}', humanPlayerQuestionStartTime)">${q.A}</button>
+            <button onclick="submitAnswer('B', '${q.answer}', humanPlayerQuestionStartTime)">${q.B}</button>
+            <button onclick="submitAnswer('C', '${q.answer}', humanPlayerQuestionStartTime)">${q.C}</button>
+            <button onclick="submitAnswer('D', '${q.answer}', humanPlayerQuestionStartTime)">${q.D}</button>
         `;
         box.style.display = 'block';
-        startTime = new Date().getTime();
+        humanPlayerQuestionStartTime = new Date().getTime();
     }
 
-    function submitAnswer(choice, correct) {
-        const timeTaken = (new Date().getTime() - startTime) / 1000;
+    function submitAnswer(choice, correctAnswer, questionStartTime) {
+        const timeTaken = (new Date().getTime() - questionStartTime) / 1000;
         const box = document.getElementById("questionBox");
         box.style.display = 'none';
 
-        let diceVal = 1;
-        if (choice === correct) {
-            if (timeTaken <= 5) diceVal = 6;
-            else if (timeTaken <= 10) diceVal = 5;
-            else if (timeTaken <= 15) diceVal = 4;
-            else if (timeTaken <= 20) diceVal = 3;
-            else if (timeTaken <= 25) diceVal = 2;
+        let diceVal;
+        if (choice === correctAnswer && timeTaken <= 15) {
+            // Roll 1-6
+            diceVal = Math.floor(Math.random() * 6) + 1;
+        } else {
+            // Roll 1-3
+            diceVal = Math.floor(Math.random() * 3) + 1;
         }
 
         document.getElementById("diceResult").innerText = `Player ${currentPlayer} got: ${diceVal}`;
+
+        // Update stats for human player in single player mode
+        // Assumes 'currentPlayer' reflects the player who just answered.
+        if (totalPlayers === 1 && currentPlayer === 1) {
+            humanPlayerTotalQuestions++;
+            if (choice === correctAnswer) {
+                humanPlayerCorrectAnswers++;
+            }
+        }
         nextTurn();
     }
 
     function nextTurn() {
         const numPlayersSelect = document.getElementById("numPlayers");
-        totalPlayers = parseInt(numPlayersSelect.value);
+        totalPlayers = parseInt(numPlayersSelect.value); // User's selection (1, 2, 3, or 4)
+
+        let effectiveNumPlayersForTurnCycle;
+        if (totalPlayers === 1) {
+            effectiveNumPlayersForTurnCycle = 2; // P1 (Human), P2 (Bot)
+        } else {
+            effectiveNumPlayersForTurnCycle = totalPlayers; // P1, P2, P3, P4 (all human)
+        }
+
         currentPlayer++;
-        if (currentPlayer > totalPlayers) currentPlayer = 1;
+        if (currentPlayer > effectiveNumPlayersForTurnCycle) {
+            currentPlayer = 1;
+        }
         document.getElementById("turnDisplay").innerText = "Current Turn: Player " + currentPlayer;
 
-        // Auto trigger for bot
+        // Auto trigger for bot. 'totalPlayers' refers to the user's selection of "1 player".
+        // 'currentPlayer' is 2 for the bot in a 1-player game.
         if (totalPlayers === 1 && currentPlayer === 2) {
             setTimeout(showQuestion, 1000);
         }
@@ -154,8 +207,11 @@
         });
 
         document.getElementById("numPlayers").addEventListener('change', () => {
-            currentPlayer = 1;
+            totalPlayers = parseInt(document.getElementById("numPlayers").value); // Update global totalPlayers
+            currentPlayer = 1; // Reset to player 1
             document.getElementById("turnDisplay").innerText = "Current Turn: Player " + currentPlayer;
+            // Optional: Clear any pending bot actions if switching away from a bot turn.
+            // For now, this is considered outside immediate scope unless issues arise.
         });
     });
     </script>
